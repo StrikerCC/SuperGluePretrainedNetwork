@@ -42,13 +42,11 @@
 
 from copy import deepcopy
 from pathlib import Path
-from typing import List, Tuple
-
 import torch
 from torch import nn
 
 
-def MLP(channels: List[int], do_bn: bool = True) -> nn.Module:
+def MLP(channels: list, do_bn=True):
     """ Multi-layer perceptron """
     n = len(channels)
     layers = []
@@ -74,7 +72,7 @@ def normalize_keypoints(kpts, image_shape):
 
 class KeypointEncoder(nn.Module):
     """ Joint encoding of visual appearance and location using MLPs"""
-    def __init__(self, feature_dim: int, layers: List[int]) -> None:
+    def __init__(self, feature_dim, layers):
         super().__init__()
         self.encoder = MLP([3] + layers + [feature_dim])
         nn.init.constant_(self.encoder[-1].bias, 0.0)
@@ -84,7 +82,7 @@ class KeypointEncoder(nn.Module):
         return self.encoder(torch.cat(inputs, dim=1))
 
 
-def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor,torch.Tensor]:
+def attention(query, key, value):
     dim = query.shape[1]
     scores = torch.einsum('bdhn,bdhm->bhnm', query, key) / dim**.5
     prob = torch.nn.functional.softmax(scores, dim=-1)
@@ -101,7 +99,7 @@ class MultiHeadedAttention(nn.Module):
         self.merge = nn.Conv1d(d_model, d_model, kernel_size=1)
         self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
 
-    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+    def forward(self, query, key, value):   # x, source, source
         batch_dim = query.size(0)
         query, key, value = [l(x).view(batch_dim, self.dim, self.num_heads, -1)
                              for l, x in zip(self.proj, (query, key, value))]
@@ -116,20 +114,20 @@ class AttentionalPropagation(nn.Module):
         self.mlp = MLP([feature_dim*2, feature_dim*2, feature_dim])
         nn.init.constant_(self.mlp[-1].bias, 0.0)
 
-    def forward(self, x: torch.Tensor, source: torch.Tensor) -> torch.Tensor:
+    def forward(self, x, source):
         message = self.attn(x, source, source)
         return self.mlp(torch.cat([x, message], dim=1))
 
 
 class AttentionalGNN(nn.Module):
-    def __init__(self, feature_dim: int, layer_names: List[str]) -> None:
+    def __init__(self, feature_dim: int, layer_names: list):
         super().__init__()
         self.layers = nn.ModuleList([
             AttentionalPropagation(feature_dim, 4)
             for _ in range(len(layer_names))])
         self.names = layer_names
 
-    def forward(self, desc0: torch.Tensor, desc1: torch.Tensor) -> Tuple[torch.Tensor,torch.Tensor]:
+    def forward(self, desc0, desc1):
         for layer, name in zip(self.layers, self.names):
             if name == 'cross':
                 src0, src1 = desc1, desc0
@@ -140,7 +138,7 @@ class AttentionalGNN(nn.Module):
         return desc0, desc1
 
 
-def log_sinkhorn_iterations(Z: torch.Tensor, log_mu: torch.Tensor, log_nu: torch.Tensor, iters: int) -> torch.Tensor:
+def log_sinkhorn_iterations(Z, log_mu, log_nu, iters: int):
     """ Perform Sinkhorn Normalization in Log-space for stability"""
     u, v = torch.zeros_like(log_mu), torch.zeros_like(log_nu)
     for _ in range(iters):
@@ -149,7 +147,7 @@ def log_sinkhorn_iterations(Z: torch.Tensor, log_mu: torch.Tensor, log_nu: torch
     return Z + u.unsqueeze(2) + v.unsqueeze(1)
 
 
-def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int) -> torch.Tensor:
+def log_optimal_transport(scores, alpha, iters: int):
     """ Perform Differentiable Optimal Transport in Log-space for stability"""
     b, m, n = scores.shape
     one = scores.new_tensor(1)
@@ -211,7 +209,7 @@ class SuperGlue(nn.Module):
             self.config['descriptor_dim'], self.config['keypoint_encoder'])
 
         self.gnn = AttentionalGNN(
-            feature_dim=self.config['descriptor_dim'], layer_names=self.config['GNN_layers'])
+            self.config['descriptor_dim'], self.config['GNN_layers'])
 
         self.final_proj = nn.Conv1d(
             self.config['descriptor_dim'], self.config['descriptor_dim'],
@@ -221,14 +219,22 @@ class SuperGlue(nn.Module):
         self.register_parameter('bin_score', bin_score)
 
         assert self.config['weights'] in ['indoor', 'outdoor']
-        path = Path(__file__).parent
-        path = path / 'weights/superglue_{}.pth'.format(self.config['weights'])
-        self.load_state_dict(torch.load(str(path)))
+        # path = Path(__file__).parent
+        # path = path / 'weights/superglue_{}.pth'.format(self.config['weights'])
+        # print(path)
+
+        # self.load_state_dict(torch.load(str(path)))
+
+        self.training = self.config['training']
+
         print('Loaded SuperGlue model (\"{}\" weights)'.format(
             self.config['weights']))
 
     def forward(self, data):
         """Run SuperGlue on a pair of keypoints and descriptors"""
+        # enable training
+        torch.set_grad_enabled(True)
+
         desc0, desc1 = data['descriptors0'], data['descriptors1']
         kpts0, kpts1 = data['keypoints0'], data['keypoints1']
 
@@ -263,23 +269,74 @@ class SuperGlue(nn.Module):
         scores = log_optimal_transport(
             scores, self.bin_score,
             iters=self.config['sinkhorn_iterations'])
+        if self.train:
+            zero = scores.new_tensor(0)
+            scores[:, -1, -1] = zero
+            mscores = torch.exp(scores)
 
-        # Get the matches with score above "match_threshold".
-        max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
-        indices0, indices1 = max0.indices, max1.indices
-        mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
-        mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
-        zero = scores.new_tensor(0)
-        mscores0 = torch.where(mutual0, max0.values.exp(), zero)
-        mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
-        valid0 = mutual0 & (mscores0 > self.config['match_threshold'])
-        valid1 = mutual1 & valid0.gather(1, indices1)
-        indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
-        indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
+            max0, max1 = scores.max(2), scores.max(1)
+            indices0, indices1 = max0.indices, max1.indices
 
-        return {
-            'matches0': indices0, # use -1 for invalid match
-            'matches1': indices1, # use -1 for invalid match
-            'matching_scores0': mscores0,
-            'matching_scores1': mscores1,
-        }
+            # filter indices by
+            mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1,
+                                                                        indices0)   # mutual index, col max is also row max in that row
+            mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1,
+                                                                        indices1)   # mutual index, row max is also col max in that col
+            zero = scores.new_tensor(0)
+            mscores0 = torch.where(mutual0, max0.values.exp(), zero)                # matching score along col
+            mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)     # matching score along row
+            valid0 = mutual0 & (mscores0 > 0.2)                                     # filter low score along col
+            valid1 = mutual1 & valid0.gather(1, indices1)                           # filter low score along row
+            indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))       # fill invalid match indices with -1
+            indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))       # fill invalid match indices with -1
+
+            mask_dustbin0 = indices0[:, :-1] == scores.size()[1] - 1
+            mask_dustbin1 = indices1[:, :-1] == scores.size()[0] - 1
+            indices0_dustbin_marked = torch.where(torch.logical_not(mask_dustbin0), indices0[:, :-1], indices0.new_tensor(-1))  # fill invalid match indices with -1
+            indices1_dustbin_marked = torch.where(torch.logical_not(mask_dustbin1), indices1[:, :-1], indices1.new_tensor(-1))  # fill invalid match indices with -1
+            mscores0_dustbin_marked = torch.where(torch.logical_not(mask_dustbin0), mscores0[:, :-1],
+                                                  mscores0.new_tensor(0.0))  # fill invalid match indices with -1
+            mscores1_dustbin_marked = torch.where(torch.logical_not(mask_dustbin1), mscores1[:, :-1],
+                                                  mscores1.new_tensor(0.0))  # fill invalid match indices with -1
+
+            # make match score confusion matrix
+            # mscores = scores.new_zeros(scores.size())
+            # for i_batch in range(len(mscores)):
+            #     # indices0_valid, indices1_valid = indices0[i_batch][valid0[i_batch]], indices1[i_batch][valid1[i_batch]]
+            #     indices0_valid, indices1_valid = indices0[i_batch], indices1[i_batch]
+            #     mscores0_valid = mscores0[i_batch]
+            #     indices_valid_0 = torch.arange(0, indices0_valid.shape[0], device=indices0.device)[:, None]
+            #     indices_valid_1 = indices0_valid[:, None]
+            #     indices_valid = torch.cat([indices_valid_0, indices_valid_1], dim=-1)
+            #     mscores[i_batch][indices_valid.T.tolist()] = mscores0_valid
+            #     mscores[:, -1, -1] = scores.new_tensor(0.0)
+            return {
+                'matches0': indices0_dustbin_marked,  # use -1 for invalid hair_close_range_match
+                'matches1': indices1_dustbin_marked,  # use -1 for invalid hair_close_range_match
+                'matching_scores0': mscores0_dustbin_marked,
+                'matching_scores1': mscores1_dustbin_marked,
+                'scores': mscores
+            }
+        else:
+            # Get the matches with score above "match_threshold".
+            # get indices
+            max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
+            indices0, indices1 = max0.indices, max1.indices
+
+            # filter indices by
+            mutual0 = arange_like(indices0, 1)[None] == indices1.gather(1, indices0)    # mutual index, col max is also row max in that row
+            mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)    # mutual index, row max is also col max in that col
+            zero = scores.new_tensor(0)
+            mscores0 = torch.where(mutual0, max0.values.exp(), zero)                    # matching score along col
+            mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)         # matching score along row
+            valid0 = mutual0 & (mscores0 > self.config['match_threshold'])              # filter low score along col
+            valid1 = mutual1 & valid0.gather(1, indices1)                               # filter low score along row
+            indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))           # fill invalid match indices with -1
+            indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))           # fill invalid match indices with -1
+
+            return {
+                'matches0': indices0,   # use -1 for invalid hair_close_range_match
+                'matches1': indices1,   # use -1 for invalid hair_close_range_match
+                'matching_scores0': mscores0,
+                'matching_scores1': mscores1,
+            }

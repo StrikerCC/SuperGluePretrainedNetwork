@@ -103,7 +103,7 @@ if __name__ == '__main__':
         help='Number of Sinkhorn iterations performed by SuperGlue')
     parser.add_argument(
         '--match_threshold', type=float, default=0.2,
-        help='SuperGlue match threshold')
+        help='SuperGlue hair_close_range_match threshold')
 
     parser.add_argument(
         '--show_keypoints', action='store_true',
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     # Create a window to display the demo.
     if not opt.no_display:
         cv2.namedWindow('SuperGlue matches', cv2.WINDOW_NORMAL)
-        cv2.resizeWindow('SuperGlue matches', 640*2, 480)
+        cv2.resizeWindow('SuperGlue matches', (640*2, 480))
     else:
         print('Skipping visualization, will not show a GUI.')
 
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     print('==> Keyboard control:\n'
           '\tn: select the current frame as the anchor\n'
           '\te/r: increase/decrease the keypoint confidence threshold\n'
-          '\td/f: increase/decrease the match filtering threshold\n'
+          '\td/f: increase/decrease the hair_close_range_match filtering threshold\n'
           '\tk: toggle the visualization of keypoints\n'
           '\tq: quit')
 
@@ -236,11 +236,11 @@ if __name__ == '__main__':
                 print('\nChanged the keypoint threshold to {:.4f}'.format(
                     matching.superpoint.config['keypoint_threshold']))
             elif key in ['d', 'f']:
-                # Increase/decrease match threshold by 0.05 each keypress.
+                # Increase/decrease hair_close_range_match threshold by 0.05 each keypress.
                 d = 0.05 * (-1 if key == 'd' else 1)
                 matching.superglue.config['match_threshold'] = min(max(
                     0.05, matching.superglue.config['match_threshold']+d), .95)
-                print('\nChanged the match threshold to {:.2f}'.format(
+                print('\nChanged the hair_close_range_match threshold to {:.2f}'.format(
                     matching.superglue.config['match_threshold']))
             elif key == 'k':
                 opt.show_keypoints = not opt.show_keypoints

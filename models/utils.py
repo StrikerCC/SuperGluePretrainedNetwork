@@ -41,7 +41,7 @@
 # %AUTHORS_END%
 # --------------------------------------------------------------------*/
 # %BANNER_END%
-
+import warnings
 from pathlib import Path
 import time
 from collections import OrderedDict
@@ -261,7 +261,19 @@ def frame2tensor(frame, device):
 
 
 def read_image(path, device, resize, rotation, resize_float):
-    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    image = None
+    if isinstance(path, str):
+        image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    elif isinstance(path, np.ndarray):
+        if len(path) == 2 or path.shape[-1] == 1:
+            pass
+        elif path.shape[-1] == 3:
+            image = cv2.cvtColor(path, cv2.COLOR_BGR2GRAY)
+        else:
+            raise IOError('input image shape ' + str(path.shape), ' not recognized')
+    else:
+        raise IOError('input format ' + type(path) + '' + str(path) + ' not recognized')
+
     if image is None:
         return None, None, None
     w, h = image.shape[1], image.shape[0]

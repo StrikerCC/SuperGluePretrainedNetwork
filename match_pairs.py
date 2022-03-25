@@ -109,7 +109,7 @@ if __name__ == '__main__':
         help='Number of Sinkhorn iterations performed by SuperGlue')
     parser.add_argument(
         '--match_threshold', type=float, default=0.2,
-        help='SuperGlue match threshold')
+        help='SuperGlue hair_close_range_match threshold')
 
     parser.add_argument(
         '--viz', action='store_true',

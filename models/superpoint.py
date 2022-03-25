@@ -84,7 +84,7 @@ def sample_descriptors(keypoints, descriptors, s: int = 8):
     keypoints /= torch.tensor([(w*s - s/2 - 0.5), (h*s - s/2 - 0.5)],
                               ).to(keypoints)[None]
     keypoints = keypoints*2 - 1  # normalize to (-1, 1)
-    args = {'align_corners': True} if torch.__version__ >= '1.3' else {}
+    args = {'align_corners': True} if int(torch.__version__[2]) > 2 else {}
     descriptors = torch.nn.functional.grid_sample(
         descriptors, keypoints.view(b, 1, -1, 2), mode='bilinear', **args)
     descriptors = torch.nn.functional.normalize(
@@ -134,6 +134,7 @@ class SuperPoint(nn.Module):
             kernel_size=1, stride=1, padding=0)
 
         path = Path(__file__).parent / 'weights/superpoint_v1.pth'
+        print(path)
         self.load_state_dict(torch.load(str(path)))
 
         mk = self.config['max_keypoints']
@@ -144,6 +145,9 @@ class SuperPoint(nn.Module):
 
     def forward(self, data):
         """ Compute keypoints, scores, descriptors for image """
+        # no training
+        torch.set_grad_enabled(False)
+
         # Shared Encoder
         x = self.relu(self.conv1a(data['image']))
         x = self.relu(self.conv1b(x))

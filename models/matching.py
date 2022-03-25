@@ -50,8 +50,9 @@ class Matching(torch.nn.Module):
     """ Image Matching Frontend (SuperPoint + SuperGlue) """
     def __init__(self, config={}):
         super().__init__()
-        self.superpoint = SuperPoint(config.get('superpoint', {}))
-        self.superglue = SuperGlue(config.get('superglue', {}))
+        device = config.get('device')
+        self.superpoint = SuperPoint(config.get('superpoint', {})).to(device)
+        self.superglue = SuperGlue(config.get('superglue', {})).to(device)
 
     def forward(self, data):
         """ Run SuperPoint (optionally) and SuperGlue
@@ -82,3 +83,6 @@ class Matching(torch.nn.Module):
         pred = {**pred, **self.superglue(data)}
 
         return pred
+
+    def __str__(self):
+        return 'SuperPoint + SuperGlue\n' + str(self.superglue.config)
