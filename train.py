@@ -12,7 +12,7 @@ from dataset.dataset import DatasetKeyPointsMatch, DatasetImgTF
 import loss
 from matcher import MatcherSuperGlue
 
-device = 'cuda:3'
+device = 'cuda:0'
 
 
 def change_pred_to_cpu_and_image_frame(pred, scales0, scales1):
@@ -40,10 +40,10 @@ def make_gt_from_pred(pred_cpu, dt, item, flag_vis=False):
     gt = {**gt, **dt.get_match_matrix(item, kpts_0_pred, kpts_1_pred)}
 
     mscores = gt['scores']
-    indices0 = mscores.argmax(1)[:-1]
-    valid = indices0 < mscores.shape[1] - 1
-    indices0[np.logical_not(valid)] = -1
-    matches_0_gt = indices0
+    indices0_gt = mscores.argmax(1)[:-1]
+    valid = indices0_gt < mscores.shape[1] - 1
+    indices0_gt[np.logical_not(valid)] = -1
+    matches_0_gt = indices0_gt
 
     # matches_0_gt = gt['matches0']
     pos_gt = matches_0_gt > -1
@@ -54,8 +54,9 @@ def make_gt_from_pred(pred_cpu, dt, item, flag_vis=False):
     # get corrected match key-points
     matches_0_pred = pred_cpu['matches0']
     true_pred = matches_0_pred == matches_0_gt
-    pos_pred = matches_0_pred > -1
-    neg_pred = matches_0_pred <= -1
+    pos_pred = np.logical_and(matches_0_pred > -1, matches_0_pred < len(kpts_1_pred) - 1)
+    neg_pred = np.logical_not(pos_pred)
+
     true_pos = np.logical_and(pos_pred, true_pred)
     true_neg = np.logical_and(neg_pred, true_pred)
 
@@ -152,8 +153,8 @@ def save_training_result(recall, precision, loss):
 def train(dt, model, flag_vis=False):
     epochs = 100
     # resize = (400, 320)
-    resize = (800, 640)
-    # resize = [772, 516]
+    # resize = (800, 640)
+    resize = [772, 516]
     # resize = (1544, 1032)
 
     # enable training
