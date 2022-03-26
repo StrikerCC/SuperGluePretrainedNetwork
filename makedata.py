@@ -10,8 +10,11 @@ def main():
     # dir_src_path = './data/hair_close_range/'
     # dir_tgt_path = './data/hair_close_range_tf/'
 
-    dir_src_path = './data/graf/'
-    dir_tgt_path = './data/graf_tf/'
+    # dir_src_path = './data/graf/'
+    # dir_tgt_path = './data/graf_tf/'
+
+    dir_src_path = './data/hair/'
+    dir_tgt_path = './data/hair_tf/'
 
     dt = DatasetImgTF()
     dt.build_img_from_dir(dir_src_path, dir_tgt_path)
@@ -28,7 +31,8 @@ def main():
         pts0, feat0 = slam_lib.feature.sift_features(img0)
         pts1, feat1 = slam_lib.feature.sift_features(img1)
 
-        match = dt.get_match_matrix(i, pts0, pts1)[:-1, :-1]
+        match = dt.get_match_matrix(i, pts0, pts1)['scores']
+        match = match[:-1, :-1]
         ids0 = []
         ids1 = []
         for id0, id0_ids1 in enumerate(match):

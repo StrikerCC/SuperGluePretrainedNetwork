@@ -12,7 +12,7 @@ from dataset.dataset import DatasetKeyPointsMatch, DatasetImgTF
 import loss
 from matcher import MatcherSuperGlue
 
-device = 'cuda:0'
+device = 'cuda:3'
 
 
 def change_pred_to_cpu_and_image_frame(pred, scales0, scales1):
@@ -41,7 +41,7 @@ def make_gt_from_pred(pred_cpu, dt, item, flag_vis=False):
 
     mscores = gt['scores']
     indices0 = mscores.argmax(1)[:-1]
-    valid = indices0 < len(indices0) - 1
+    valid = indices0 < mscores.shape[1] - 1
     indices0[np.logical_not(valid)] = -1
     matches_0_gt = indices0
 
@@ -213,7 +213,7 @@ def train(dt, model, flag_vis=False):
 def main():
     """"""
     '''file paths'''
-    match_data_dir = './data/graf_tf/'
+    match_data_dir = './data/hair_tf/'
 
     dt = DatasetImgTF()
     dt.load_img_from_dir(match_data_dir)

@@ -53,9 +53,9 @@ class MatcherSuperGlue:
         # self.resize = [1024, 750]
         # self.resize = [512, 375]
 
-        # self.resize = [3088, 2064]
+        self.resize = [3088, 2064]
         # self.resize = [1544, 1032]
-        self.resize = [772, 516]
+        # self.resize = [772, 516]
         # self.resize = [386, 258]
 
     def match(self, img_0, img_1, flag_vis=False):

@@ -10,6 +10,6 @@
 *.txt
 *.ppm
 
-./data/
-./dump_match_pairs/
-./.idea/
+/data/
+/dump_match_pairs/
+/.idea/

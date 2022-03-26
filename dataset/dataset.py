@@ -54,21 +54,21 @@ class DatasetImgTF(Dataset):
         self.img1_filepaths = []
         self.tf_0_2_1_filepath = []
 
-        self.num_tf_each_data = 3
+        self.num_tf_each_data = 1
 
-        self.__scale_range_x = (0.8, 2.0)
+        self.__scale_range_x = (0.5, 2.0)
         self.__scale_range_y = (0.8, 2.0)
-        self.__scale_range_x = (0.8, 1.0)
-        self.__scale_range_y = (0.8, 1.0)
+        # self.__scale_range_x = (0.8, 1.0)
+        # self.__scale_range_y = (0.8, 1.0)
 
         self.__offset_range_x = (-300, 300)
         self.__offset_range_y = (-300, 300)
-        self.__offset_range_x = (-3, 3)
-        self.__offset_range_y = (-3, 3)
+        # self.__offset_range_x = (-3, 3)
+        # self.__offset_range_y = (-3, 3)
 
         self.__angle_range_x = (0, 0)
         self.__angle_range_y = (0, 0)
-        self.__angle_range_z = (-np.pi/6, np.pi/6)
+        self.__angle_range_z = (-np.pi/3, np.pi/3)
 
         # self.resize = (772, 516)
         # self.resize = (1544, 1032)
