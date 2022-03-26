@@ -1,3 +1,5 @@
+import os
+
 import torch
 import numpy as np
 import cv2
@@ -79,7 +81,7 @@ def make_gt_from_pred(pred_cpu, dt, item, flag_vis=False):
     '''vis'''
     if flag_vis:
         img_0, img_1 = dt[item]['image0'], dt[item]['image1']
-        vis_gt_and_pred(1, img_0, kpts_0_pred, mkpts_1_gt, mkpts_0_pos, mkpts_0_true_pos, img_1, kpts_1_pred, mkpts_0_gt, mkpts_1_pos, mkpts_1_true_pos)
+        img_match_gt, img_match_pred, img_match_correct = vis_gt_and_pred(1, img_0, kpts_0_pred, mkpts_1_gt, mkpts_0_pos, mkpts_0_true_pos, img_1, kpts_1_pred, mkpts_0_gt, mkpts_1_pos, mkpts_1_true_pos)
 
     return gt, recall, precision
     
@@ -98,10 +100,10 @@ def vis_gt_and_pred(wait: int, img_0, kpts_0_pred, mkpts_1_gt, mkpts_0_pos, mkpt
     cv2.imshow('pt1', img_pt)
     cv2.waitKey(wait)
 
-    img3 = slam_lib.vis.draw_matches_(img_0, mkpts_0_gt, img_1, mkpts_1_gt)
-    cv2.imwrite(saving_dir + '/match_gt.jpg', img3)
+    img_match_gt = slam_lib.vis.draw_matches_(img_0, mkpts_0_gt, img_1, mkpts_1_gt)
+    cv2.imwrite(saving_dir + '/match_gt.jpg', img_match_gt)
     cv2.namedWindow('match gt', cv2.WINDOW_NORMAL)
-    cv2.imshow('match gt', img3)
+    cv2.imshow('match gt', img_match_gt)
     cv2.waitKey(wait)
 
     img_pt = slam_lib.vis.draw_pts(img_0, mkpts_0_pos)
@@ -116,37 +118,67 @@ def vis_gt_and_pred(wait: int, img_0, kpts_0_pred, mkpts_1_gt, mkpts_0_pos, mkpt
     cv2.imshow('mpt1', img_pt)
     cv2.waitKey(wait)
 
-    img3 = slam_lib.vis.draw_matches_(img_0, mkpts_0_pos, img_1, mkpts_1_pos)
-    cv2.imwrite(saving_dir + '/match.jpg', img3)
+    img_match_pred = slam_lib.vis.draw_matches_(img_0, mkpts_0_pos, img_1, mkpts_1_pos)
+    cv2.imwrite(saving_dir + '/match.jpg', img_match_pred)
     cv2.namedWindow('match pred', cv2.WINDOW_NORMAL)
-    cv2.imshow('match pred', img3)
+    cv2.imshow('match pred', img_match_pred)
     cv2.waitKey(wait)
 
-    img3 = slam_lib.vis.draw_matches_(img_0, mkpts_0_true_pos, img_1, mkpts_1_true_pos)
-    cv2.imwrite(saving_dir + '/match_right.jpg', img3)
+    img_match_correct = slam_lib.vis.draw_matches_(img_0, mkpts_0_true_pos, img_1, mkpts_1_true_pos)
+    cv2.imwrite(saving_dir + '/match_right.jpg', img_match_correct)
     cv2.namedWindow('match right', cv2.WINDOW_NORMAL)
-    cv2.imshow('match right', img3)
+    cv2.imshow('match right', img_match_correct)
     cv2.waitKey(wait)
 
+    return img_match_gt, img_match_pred, img_match_correct
 
-def save_training_result(recall, precision, loss):
+
+def make_result_dir():
+    """make newest exp folder to save result"""
+    result_dir = './results/'
+    saving_dir_prefix = 'exp'
+    saved_dirs = os.listdir(result_dir)
+    saved_indices = [int(saved_dir[len(saving_dir_prefix):]) for saved_dir in saved_dirs if
+                     saving_dir_prefix in saved_dir]
+    saving_index = 0
+    if len(saved_dirs) > 0:
+        saving_index = sorted(saved_indices)[-1] + 1
+    saving_dir = saving_dir_prefix + str(saving_index)
+    saving_dir = result_dir + '/' + saving_dir
+    os.makedirs(saving_dir)
+    return saving_dir
+
+
+def save_training_result(model, recall, precision, loss, saving_dir):
+    """"""
+    precision_and_recall_fig_name = 'r&p.png'
+    loss_fig_name = 'loss.png'
+    model_name = 'superglue_latest.pth'
+
+    '''save model'''
+    torch.save(model.superglue, saving_dir + '/' + model_name)
+
+    '''save figures'''
     fig1, ax1 = plt.subplots()
-    ax1.plot(recall, label='recall')
-    ax1.plot(precision, label='precision')
+    if precision is not None:
+        ax1.plot(precision, label='precision')
+    if recall is not None:
+        ax1.plot(recall, label='recall')
     ax1.set_xlabel('epoch')
     ax1.set_ylabel('%')
     ax1.set_title('recall & precision')
     ax1.legend()
-    fig1.savefig('./results/r&p.png')
+    fig1.savefig(saving_dir + '/' + precision_and_recall_fig_name)
     # fig1.show()
 
     fig2, ax2 = plt.subplots()
-    ax2.plot(loss, label='loss')
+    if loss is not None:
+        ax2.plot(loss, label='loss')
     ax2.set_xlabel('epoch')
     ax2.set_ylabel('no unit')
     ax2.set_title('loss')
     ax2.legend()
-    fig2.savefig('./results/loss.png')
+    fig2.savefig(saving_dir + '/' + loss_fig_name)
     # fig2.show()
 
 
@@ -162,11 +194,15 @@ def train(dt, model, flag_vis=False):
     torch.autograd.set_detect_anomaly(True)
     # print('Training ', model, 'at', model.cuda())
 
-    optimizer = torch.optim.SGD(model.superglue.parameters(), lr=0.01)
+    optimizer = torch.optim.SGD(model.superglue.parameters(), lr=0.001, momentum=0.9)
     loss_fn = torch.nn.CrossEntropyLoss()
     # loss_fn = torch.nn.BCELoss()
 
     epoch_losses, epoch_recalls, epoch_precisions = [], [], []
+
+    '''make newest exp folder to save result'''
+    saving_dir = make_result_dir()
+
     for epoch in range(epochs):
         epoch_loss, epoch_recall, epoch_precision = 0.0, 0.0, 0.0
         model.superglue.train()
@@ -206,7 +242,7 @@ def train(dt, model, flag_vis=False):
 
         '''epoch logging'''
         epoch_losses.append(epoch_loss), epoch_recalls.append(epoch_recall), epoch_precisions.append(epoch_precision)
-        save_training_result(epoch_recalls, epoch_precisions, epoch_losses)
+        save_training_result(model, epoch_recalls, epoch_precisions, epoch_losses, saving_dir)
         print('iter-', epoch, 'bce-loss:', epoch_loss, 'recall:', epoch_recall, 'precision', epoch_precision)
     return
 
@@ -236,9 +272,7 @@ def main():
     }
 
     matcher = Matching(config).to(device)
-
     train(dt, matcher, flag_vis=True)
-
     return
 
 

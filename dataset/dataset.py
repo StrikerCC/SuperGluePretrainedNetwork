@@ -56,8 +56,8 @@ class DatasetImgTF(Dataset):
 
         self.num_tf_each_data = 1
 
-        self.__scale_range_x = (0.5, 2.0)
-        self.__scale_range_y = (0.8, 2.0)
+        self.__scale_range_x = (0.5, 1.6)
+        self.__scale_range_y = (0.5, 1.6)
         # self.__scale_range_x = (0.8, 1.0)
         # self.__scale_range_y = (0.8, 1.0)
 
@@ -68,12 +68,12 @@ class DatasetImgTF(Dataset):
 
         self.__angle_range_x = (0, 0)
         self.__angle_range_y = (0, 0)
-        self.__angle_range_z = (-np.pi/3, np.pi/3)
+        self.__angle_range_z = (-np.pi/6, np.pi/6)
 
         # self.resize = (772, 516)
         # self.resize = (1544, 1032)
-        self.resize = (3088, 2064)
-        # self.resize = (800, 640)
+        # self.resize = (3088, 2064)
+        self.resize = (800, 640)
 
     def __len__(self):
         return len(self.img0_filepaths)
@@ -95,7 +95,7 @@ class DatasetImgTF(Dataset):
         pts0_1 = slam_lib.mapping.transform_pt_2d(tf_0_2_1, pts0)
 
         '''match pts 1 with transformed pts 0'''
-        ids_0_2_1 = slam_lib.geometry.nearest_neighbor_points_2_points(pts0_1, pts1, distance_min=5)
+        ids_0_2_1 = slam_lib.geometry.nearest_neighbor_points_2_points(pts0_1, pts1, distance_min=50)
 
         '''fill match indices'''
         matches0, matches1 = np.zeros(pts0.shape[0]).astype(int) - 1, np.zeros(pts1.shape[0]).astype(int) - 1
